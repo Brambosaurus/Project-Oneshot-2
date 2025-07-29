@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 public class PlayerAttack : MonoBehaviour
 {
@@ -20,11 +21,28 @@ public class PlayerAttack : MonoBehaviour
     public float lightCooldown = 0.3f;
     public float heavyCooldown = 0.6f;
 
+    [Header("Lunge Movement")]
+    [SerializeField] private float lightLungeDistance = 0.5f;
+    [SerializeField] private float heavyLungeDistance = 1f;
+    [SerializeField] private float lungeDuration = 0.1f;
+    [SerializeField] private AnimationCurve lungeCurve;
+
     private float lastLightTime = -999f;
     private float lastHeavyTime = -999f;
 
+    private Rigidbody _rb;
+    private CameraZoomController camShake;
+
+    void Start()
+    {
+        _rb = GetComponent<Rigidbody>();
+        camShake = FindObjectOfType<CameraZoomController>();
+    }
+
     void Update()
     {
+        if (PlayerController.IsAttacking) return;
+
         if (Input.GetMouseButtonDown(0) && Time.time - lastLightTime >= lightCooldown)
         {
             LightAttack();
@@ -41,11 +59,13 @@ public class PlayerAttack : MonoBehaviour
     void LightAttack()
     {
         PerformAttack(lightRange, lightArc, lightDamage, lightKnockback, Color.red, "Light");
+        StartCoroutine(Lunge(lightLungeDistance));
     }
 
     void HeavyAttack()
     {
         PerformAttack(heavyRange, heavyArc, heavyDamage, heavyKnockback, Color.blue, "Heavy");
+        StartCoroutine(Lunge(heavyLungeDistance));
     }
 
     void PerformAttack(float radius, float arcAngle, int damageAmount, float knockbackForce, Color gizmoColor, string label)
@@ -61,20 +81,42 @@ public class PlayerAttack : MonoBehaviour
                 Vector3 dirToEnemy = (hit.transform.position - origin).normalized;
                 float angle = Vector3.Angle(transform.forward, dirToEnemy);
 
-                if (angle <= arcAngle)
+                if (angle <= arcAngle * 0.5f)
                 {
                     enemy.TakeDamage(damageAmount, dirToEnemy, knockbackForce);
+                    camShake?.TriggerShake(); // camera shake bij impact
                     Debug.Log($"💥 {label} attack hit: {hit.name}");
                 }
             }
         }
 
-        // Debug draw arc direction
         Debug.DrawRay(origin, Quaternion.Euler(0, -arcAngle, 0) * transform.forward * radius, gizmoColor, 1f);
         Debug.DrawRay(origin, Quaternion.Euler(0, arcAngle, 0) * transform.forward * radius, gizmoColor, 1f);
     }
 
-    // Optional visualisation in editor
+    private IEnumerator Lunge(float distance)
+    {
+        PlayerController.SetAttacking(true);
+
+        float timer = 0f;
+        Vector3 start = transform.position;
+        Vector3 direction = transform.forward;
+        Vector3 target = start + direction * distance;
+
+        while (timer < lungeDuration)
+        {
+            float percent = timer / lungeDuration;
+            float curveValue = lungeCurve != null ? lungeCurve.Evaluate(percent) : percent;
+            Vector3 newPos = Vector3.Lerp(start, target, curveValue);
+
+            _rb.MovePosition(newPos);
+            timer += Time.fixedDeltaTime;
+            yield return new WaitForFixedUpdate();
+        }
+
+        PlayerController.SetAttacking(false);
+    }
+
     void OnDrawGizmosSelected()
     {
         Vector3 origin = transform.position + Vector3.up * 0.5f;

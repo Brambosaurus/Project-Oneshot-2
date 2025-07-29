@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using System.Collections;
 
 public class PlayerController : MonoBehaviour
 {
@@ -9,8 +10,8 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float acceleration = 10f;
 
     [Header("Sprint")]
+    public KeyCode sprintKey = KeyCode.LeftShift;
     [SerializeField] private float sprintMultiplier = 1.5f;
-    [SerializeField] public KeyCode sprintKey = KeyCode.LeftShift;
 
     [Header("Roll Dash")]
     [SerializeField] private float rollDistance = 5f;
@@ -18,27 +19,72 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float rollCooldown = 1f;
     [SerializeField] private AnimationCurve rollCurve;
 
+    [Header("Roll in Mud")]
+    [SerializeField] private float mudRollDistance = 2.5f;
+    [SerializeField] private float mudRollDuration = 0.5f;
+
+    [Header("Terrain")]
+    [SerializeField] private float terrainSpeedMultiplier = 1f;
+
+    [Header("Roll Charges")]
+    [SerializeField] private int maxRolls = 2;
+    private int rollsLeft;
+
     private bool isRolling = false;
     private float rollTimer = 0f;
     private float cooldownTimer = 0f;
     private Vector3 rollDirection;
+    private bool isInMud = false;
+
+    private float currentRollDistance;
+    private float currentRollDuration;
 
     private Vector3 _input;
     private Vector3 _movementDirection;
     private Vector3 lastMovementDirection;
 
+    private CameraZoomController camZoom;
+
+    private float comboWindowTimer = 0f;
+    [SerializeField] private float comboWindowDuration = 0.4f;
+
+    public static bool IsAttacking { get; private set; }
+    public static void SetAttacking(bool state)
+    {
+        if (!Instance.isRolling || state == false)
+            IsAttacking = state;
+    }
+
     public Vector3 movementDirection => _movementDirection;
+    public float TerrainSpeedMultiplier => terrainSpeedMultiplier;
+    public bool IsSprinting => Input.GetKey(sprintKey) && !isInMud;
+
+    private static PlayerController Instance;
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
+        camZoom = FindObjectOfType<CameraZoomController>();
+        rollsLeft = maxRolls;
+        Instance = this;
     }
 
     private void Update()
     {
-        cooldownTimer -= Time.deltaTime;
+        if (rollsLeft == 0)
+        {
+            cooldownTimer -= Time.deltaTime;
+            if (cooldownTimer <= 0f)
+            {
+                rollsLeft = maxRolls;
+                cooldownTimer = 0f;
+            }
+        }
 
-        if (!isRolling && Input.GetKeyDown(KeyCode.Space) && cooldownTimer <= 0f)
+        if (comboWindowTimer > 0f)
+            comboWindowTimer -= Time.deltaTime;
+
+        if (!isRolling && Input.GetKeyDown(KeyCode.Space) && (rollsLeft > 0 || comboWindowTimer > 0f))
         {
             StartRoll();
         }
@@ -84,7 +130,10 @@ public class PlayerController : MonoBehaviour
 
     private void Move()
     {
-        float currentSpeed = Input.GetKey(sprintKey) ? _speed * sprintMultiplier : _speed;
+        bool canSprint = Input.GetKey(sprintKey) && !isInMud;
+        float baseSpeed = canSprint ? _speed * sprintMultiplier : _speed;
+        float currentSpeed = baseSpeed * terrainSpeedMultiplier;
+
         _rb.MovePosition(transform.position + _movementDirection * currentSpeed * Time.deltaTime);
     }
 
@@ -92,7 +141,18 @@ public class PlayerController : MonoBehaviour
     {
         isRolling = true;
         rollTimer = 0f;
-        cooldownTimer = rollCooldown;
+
+        if (rollsLeft > 0)
+        {
+            rollsLeft--;
+            if (rollsLeft == 0)
+            {
+                cooldownTimer = rollCooldown;
+            }
+        }
+
+        currentRollDistance = isInMud ? mudRollDistance : rollDistance;
+        currentRollDuration = isInMud ? mudRollDuration : rollDuration;
 
         rollDirection = _movementDirection != Vector3.zero ? _movementDirection : lastMovementDirection;
         rollDirection.y = 0f;
@@ -102,25 +162,51 @@ public class PlayerController : MonoBehaviour
         {
             rollDirection = Vector3.forward;
         }
+
+        camZoom?.TriggerShake();
+        IsAttacking = false; // make sure roll cancels any attack
     }
 
     private void DoRollDash()
     {
         rollTimer += Time.fixedDeltaTime;
 
-        float percent = rollTimer / rollDuration;
+        float percent = rollTimer / currentRollDuration;
         percent = Mathf.Clamp01(percent);
 
         float curveMultiplier = rollCurve != null ? rollCurve.Evaluate(percent) : 1f;
-        float rollSpeed = (rollDistance / rollDuration) * curveMultiplier;
+        float rollSpeed = (currentRollDistance / currentRollDuration) * curveMultiplier;
 
         Vector3 movement = rollDirection * rollSpeed * Time.fixedDeltaTime;
-        transform.position += movement;
+        _rb.MovePosition(_rb.position + movement);
 
-        if (rollTimer >= rollDuration)
+        if (rollTimer >= currentRollDuration)
         {
             isRolling = false;
         }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Mud"))
+        {
+            terrainSpeedMultiplier = 0.5f;
+            isInMud = true;
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.CompareTag("Mud"))
+        {
+            terrainSpeedMultiplier = 1f;
+            isInMud = false;
+        }
+    }
+
+    public void OpenComboWindow()
+    {
+        comboWindowTimer = comboWindowDuration;
     }
 }
 
