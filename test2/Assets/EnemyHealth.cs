@@ -8,6 +8,13 @@ public class EnemyHealth : MonoBehaviour
 
     public bool isInvincible = false; // vijand tijdelijk onkwetsbaar tijdens knockback
 
+    private Rigidbody rb;
+
+    private void Awake()
+    {
+        rb = GetComponent<Rigidbody>(); // nodig voor MovePosition
+    }
+
     private void Start()
     {
         currentHealth = maxHealth;
@@ -22,7 +29,8 @@ public class EnemyHealth : MonoBehaviour
 
         // Start knockback met easing
         isInvincible = true;
-        StartCoroutine(SmoothKnockback(knockbackDirection.normalized, knockbackDistance, 0.2f));
+        knockbackDirection.y = 0f; // Geen knockback naar boven/onder
+        StartCoroutine(SmoothKnockback(knockbackDirection.normalized, knockbackDistance, 0.4f));
 
         // Voeg hier visuele effecten toe
         HitEffect();
@@ -35,24 +43,25 @@ public class EnemyHealth : MonoBehaviour
 
     private IEnumerator SmoothKnockback(Vector3 direction, float distance, float duration)
     {
-        Vector3 startPos = transform.position;
+        Vector3 startPos = rb.position;
         Vector3 endPos = startPos + direction * distance;
 
         float elapsed = 0f;
-
         while (elapsed < duration)
         {
             float t = elapsed / duration;
 
-            // Ease-out beweging (sneller in het begin, vertraagt naar einde)
+            // Ease out beweging
             float easedT = Mathf.Sin(t * Mathf.PI * 0.5f);
 
-            transform.position = Vector3.Lerp(startPos, endPos, easedT);
+            Vector3 newPos = Vector3.Lerp(startPos, endPos, easedT);
+            rb.MovePosition(newPos);
+
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        transform.position = endPos;
+        rb.MovePosition(endPos);
         isInvincible = false;
     }
 
@@ -64,7 +73,7 @@ public class EnemyHealth : MonoBehaviour
 
     private void HitEffect()
     {
-        // Voeg hier particle effects, geluid, of animatie toe
+        // Voeg hier particle effects, geluid of animatie toe
     }
 
     // Debugtest: met H toets manueel knockback forceren
@@ -72,7 +81,7 @@ public class EnemyHealth : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.H))
         {
-            TakeDamage(25, Vector3.back, 2f); // Test: 2 meter knockback achteruit
+            TakeDamage(25, -transform.forward, 2f); // Test: 2 meter knockback achteruit
         }
     }
 }

@@ -1,73 +1,88 @@
 ﻿using UnityEngine;
-using System.Collections;
 
 public class PlayerAttack : MonoBehaviour
 {
-    public float attackRange = 2f;
-    public int baseDamage = 25;
+    [Header("Damage Settings")]
+    public int lightDamage = 10;
+    public int heavyDamage = 25;
 
-    public float lightAttackDelay = 0.1f;
-    public float heavyAttackDelay = 0.6f;
+    [Header("Knockback")]
+    public float lightKnockback = 2f;
+    public float heavyKnockback = 4f;
 
-    public float attackCooldown = 0.5f;
-    private bool isAttacking = false;
+    [Header("Range & Arc")]
+    public float lightRange = 2f;
+    public float heavyRange = 3f;
+    [Range(0, 180)] public float lightArc = 90f;
+    [Range(0, 180)] public float heavyArc = 90f;
 
-    public float lightKnockback = 1f;
-    public float heavyKnockback = 2f;
+    [Header("Cooldown")]
+    public float lightCooldown = 0.3f;
+    public float heavyCooldown = 0.6f;
+
+    private float lastLightTime = -999f;
+    private float lastHeavyTime = -999f;
 
     void Update()
     {
-        if (!isAttacking)
+        if (Input.GetMouseButtonDown(0) && Time.time - lastLightTime >= lightCooldown)
         {
-            if (Input.GetMouseButtonDown(0))
-            {
-                StartCoroutine(PerformLightAttack());
-            }
+            LightAttack();
+            lastLightTime = Time.time;
+        }
 
-            if (Input.GetMouseButtonDown(1))
-            {
-                StartCoroutine(PerformHeavyAttack());
-            }
+        if (Input.GetMouseButtonDown(1) && Time.time - lastHeavyTime >= heavyCooldown)
+        {
+            HeavyAttack();
+            lastHeavyTime = Time.time;
         }
     }
 
-    IEnumerator PerformLightAttack()
+    void LightAttack()
     {
-        isAttacking = true;
-        yield return new WaitForSeconds(lightAttackDelay);
-
-        DoAttack(baseDamage, lightKnockback, Color.red);
-
-        yield return new WaitForSeconds(attackCooldown);
-        isAttacking = false;
+        PerformAttack(lightRange, lightArc, lightDamage, lightKnockback, Color.red, "Light");
     }
 
-    IEnumerator PerformHeavyAttack()
+    void HeavyAttack()
     {
-        isAttacking = true;
-        yield return new WaitForSeconds(heavyAttackDelay);
-
-        DoAttack(baseDamage * 2, heavyKnockback, Color.blue);
-
-        yield return new WaitForSeconds(attackCooldown);
-        isAttacking = false;
+        PerformAttack(heavyRange, heavyArc, heavyDamage, heavyKnockback, Color.blue, "Heavy");
     }
 
-    void DoAttack(int damage, float knockbackForce, Color debugColor)
+    void PerformAttack(float radius, float arcAngle, int damageAmount, float knockbackForce, Color gizmoColor, string label)
     {
-        Vector3 origin = transform.position + Vector3.up * 0.5f;
-        Vector3 direction = transform.forward;
+        Vector3 origin = transform.position + Vector3.up * 0.8f;
+        Collider[] hits = Physics.OverlapSphere(origin, radius);
 
-        if (Physics.Raycast(origin, direction, out RaycastHit hit, attackRange))
+        foreach (Collider hit in hits)
         {
-            Debug.DrawRay(origin, direction * attackRange, debugColor, 1f);
-
-            EnemyHealth enemy = hit.collider.GetComponent<EnemyHealth>();
+            EnemyHealth enemy = hit.GetComponent<EnemyHealth>();
             if (enemy != null)
             {
-                Vector3 knockbackDir = (hit.transform.position - transform.position).normalized;
-                enemy.TakeDamage(damage, knockbackDir, knockbackForce);
+                Vector3 dirToEnemy = (hit.transform.position - origin).normalized;
+                float angle = Vector3.Angle(transform.forward, dirToEnemy);
+
+                if (angle <= arcAngle)
+                {
+                    enemy.TakeDamage(damageAmount, dirToEnemy, knockbackForce);
+                    Debug.Log($"💥 {label} attack hit: {hit.name}");
+                }
             }
         }
+
+        // Debug draw arc direction
+        Debug.DrawRay(origin, Quaternion.Euler(0, -arcAngle, 0) * transform.forward * radius, gizmoColor, 1f);
+        Debug.DrawRay(origin, Quaternion.Euler(0, arcAngle, 0) * transform.forward * radius, gizmoColor, 1f);
+    }
+
+    // Optional visualisation in editor
+    void OnDrawGizmosSelected()
+    {
+        Vector3 origin = transform.position + Vector3.up * 0.5f;
+
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(origin, lightRange);
+
+        Gizmos.color = Color.blue;
+        Gizmos.DrawWireSphere(origin, heavyRange);
     }
 }
