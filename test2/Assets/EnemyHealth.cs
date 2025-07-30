@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections;
 
 public class EnemyHealth : MonoBehaviour
@@ -6,18 +6,31 @@ public class EnemyHealth : MonoBehaviour
     public int maxHealth = 100;
     private int currentHealth;
 
-    public bool isInvincible = false; // vijand tijdelijk onkwetsbaar tijdens knockback
+    public bool isInvincible = false;
 
     private Rigidbody rb;
 
+    // 🔴 FLASH SETTINGS
+    private Renderer rend;
+    private Color originalColor;
+    public Color hitColor = Color.red;
+    public float flashDuration = 0.1f;
+
     private void Awake()
     {
-        rb = GetComponent<Rigidbody>(); // nodig voor MovePosition
+        rb = GetComponent<Rigidbody>();
     }
 
-    private void Start()
+    void Start()
     {
         currentHealth = maxHealth;
+
+        // 🔴 Cache de renderer en originele kleur
+        rend = GetComponent<Renderer>();
+        if (rend != null)
+        {
+            originalColor = rend.material.color;
+        }
     }
 
     public void TakeDamage(int damage, Vector3 knockbackDirection, float knockbackDistance)
@@ -27,12 +40,11 @@ public class EnemyHealth : MonoBehaviour
         currentHealth -= damage;
         Debug.Log("Enemy took damage! Current HP: " + currentHealth);
 
-        // Start knockback met easing
         isInvincible = true;
-        knockbackDirection.y = 0f; // Geen knockback naar boven/onder
+        knockbackDirection.y = 0;
         StartCoroutine(SmoothKnockback(knockbackDirection.normalized, knockbackDistance, 0.4f));
 
-        // Voeg hier visuele effecten toe
+        // 🎯 VFX hier
         HitEffect();
 
         if (currentHealth <= 0)
@@ -47,16 +59,12 @@ public class EnemyHealth : MonoBehaviour
         Vector3 endPos = startPos + direction * distance;
 
         float elapsed = 0f;
+
         while (elapsed < duration)
         {
             float t = elapsed / duration;
-
-            // Ease out beweging
             float easedT = Mathf.Sin(t * Mathf.PI * 0.5f);
-
-            Vector3 newPos = Vector3.Lerp(startPos, endPos, easedT);
-            rb.MovePosition(newPos);
-
+            rb.MovePosition(Vector3.Lerp(startPos, endPos, easedT));
             elapsed += Time.deltaTime;
             yield return null;
         }
@@ -73,15 +81,28 @@ public class EnemyHealth : MonoBehaviour
 
     private void HitEffect()
     {
-        // Voeg hier particle effects, geluid of animatie toe
+        // 🌟 Start een flash coroutine
+        if (rend != null)
+        {
+            StartCoroutine(FlashRed());
+        }
+
+        // Hier kun je later particles, geluiden of animaties toevoegen
     }
 
-    // Debugtest: met H toets manueel knockback forceren
+    private IEnumerator FlashRed()
+    {
+        rend.material.color = hitColor;
+        yield return new WaitForSeconds(flashDuration);
+        rend.material.color = originalColor;
+    }
+
     void Update()
     {
+        // Debugtest
         if (Input.GetKeyDown(KeyCode.H))
         {
-            TakeDamage(25, -transform.forward, 2f); // Test: 2 meter knockback achteruit
+            TakeDamage(25, -transform.forward, 2f); // Test 2m knockback achteruit
         }
     }
 }
