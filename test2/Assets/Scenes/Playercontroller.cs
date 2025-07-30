@@ -61,6 +61,9 @@ public class PlayerController : MonoBehaviour
 
     private static PlayerController Instance;
 
+    // ✅ HIER: publieke property voor UI
+    public int CurrentDashCharges => rollsLeft;
+
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
@@ -164,7 +167,7 @@ public class PlayerController : MonoBehaviour
         }
 
         camZoom?.TriggerShake();
-        IsAttacking = false; // make sure roll cancels any attack
+        IsAttacking = false;
     }
 
     private void DoRollDash()
@@ -207,6 +210,11 @@ public class PlayerController : MonoBehaviour
     public void OpenComboWindow()
     {
         comboWindowTimer = comboWindowDuration;
+    }
+
+    public int GetRollsLeft()
+    {
+        return rollsLeft;
     }
 }
 
