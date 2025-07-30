@@ -10,6 +10,7 @@ public class PlayerAttack : MonoBehaviour
     [Header("Knockback")]
     public float lightKnockback = 2f;
     public float heavyKnockback = 4f;
+    public float smiteKnockback = 6f;
 
     [Header("Range & Arc")]
     public float lightRange = 2f;
@@ -27,16 +28,28 @@ public class PlayerAttack : MonoBehaviour
     [SerializeField] private float lungeDuration = 0.1f;
     [SerializeField] private AnimationCurve lungeCurve;
 
+    [Header("Smite Attack")]
+    public float smiteCooldown = 5f;
+    private float lastSmiteTime = -999f;
+    public GameObject smiteEffectPrefab;
+    public float smiteRange = 10f;
+    public int smiteDamage = 50;
+    public float smiteDelay = 0.3f;
+    public float hitPauseDuration = 0.1f;
+    public float smiteZoomAmount = 20f;
+    public float smiteZoomDuration = 1.5f;
+    public float smiteZoomReturnDelay = 1f;
+
     private float lastLightTime = -999f;
     private float lastHeavyTime = -999f;
 
     private Rigidbody _rb;
-    private CameraZoomController camShake;
+    private CameraZoomController zoomController;
 
     void Start()
     {
         _rb = GetComponent<Rigidbody>();
-        camShake = FindObjectOfType<CameraZoomController>();
+        zoomController = Camera.main.GetComponent<CameraZoomController>();
     }
 
     void Update()
@@ -53,6 +66,12 @@ public class PlayerAttack : MonoBehaviour
         {
             HeavyAttack();
             lastHeavyTime = Time.time;
+        }
+
+        if (Input.GetKeyDown(KeyCode.E) && Time.time - lastSmiteTime >= smiteCooldown)
+        {
+            StartCoroutine(DelayedSmite());
+            lastSmiteTime = Time.time;
         }
     }
 
@@ -84,8 +103,7 @@ public class PlayerAttack : MonoBehaviour
                 if (angle <= arcAngle * 0.5f)
                 {
                     enemy.TakeDamage(damageAmount, dirToEnemy, knockbackForce);
-                    camShake?.TriggerShake(); // camera shake bij impact
-                    Debug.Log($"💥 {label} attack hit: {hit.name}");
+                    Debug.Log($"\uD83D\uDCA5 {label} attack hit: {hit.name}");
                 }
             }
         }
@@ -117,6 +135,49 @@ public class PlayerAttack : MonoBehaviour
         PlayerController.SetAttacking(false);
     }
 
+    private IEnumerator DelayedSmite()
+    {
+        PlayerController.SetAttacking(true);
+
+        if (smiteEffectPrefab)
+        {
+            GameObject vfx = Instantiate(smiteEffectPrefab, transform.position + transform.forward * 2f, Quaternion.identity);
+            Destroy(vfx, 2f);
+        }
+
+        if (zoomController)
+            zoomController.TriggerZoom(smiteZoomAmount, smiteZoomDuration);
+
+        yield return new WaitForSeconds(smiteDelay);
+
+        Collider[] hits = Physics.OverlapSphere(transform.position, smiteRange);
+        foreach (Collider hit in hits)
+        {
+            EnemyHealth enemy = hit.GetComponent<EnemyHealth>();
+            if (enemy != null)
+            {
+                Vector3 dir = (hit.transform.position - transform.position).normalized;
+                enemy.TakeDamage(smiteDamage, dir, smiteKnockback);
+            }
+        }
+
+        StartCoroutine(HitPause());
+
+        yield return new WaitForSeconds(smiteZoomReturnDelay);
+        if (zoomController)
+            zoomController.ResetZoom();
+
+        Debug.Log("⚡ Smite cast!");
+        PlayerController.SetAttacking(false);
+    }
+
+    private IEnumerator HitPause()
+    {
+        Time.timeScale = 0f;
+        yield return new WaitForSecondsRealtime(hitPauseDuration);
+        Time.timeScale = 1f;
+    }
+
     void OnDrawGizmosSelected()
     {
         Vector3 origin = transform.position + Vector3.up * 0.5f;
@@ -126,5 +187,8 @@ public class PlayerAttack : MonoBehaviour
 
         Gizmos.color = Color.blue;
         Gizmos.DrawWireSphere(origin, heavyRange);
+
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, smiteRange);
     }
 }
